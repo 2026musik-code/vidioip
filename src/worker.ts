@@ -149,27 +149,7 @@ api.get('/search', async (c) => {
   }
 });
 
-api.get('/proxy-video', async (c) => {
-  const url = c.req.query('url');
-  if (!url) {
-    return new Response('URL is required', { status: 400 });
-  }
 
-  try {
-      const headers = new Headers();
-      headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-      headers.set("Referer", "https://drama.sansekai.my.id/");
-      headers.set("Accept", "*/*");
-
-      const range = c.req.header('range');
-      if (range) headers.set('Range', range);
-
-      return await fetch(url, { headers });
-  } catch (error) {
-      console.error("Proxy error:", error);
-      return new Response('Proxy Server Error', { status: 500 });
-  }
-});
 
 api.get('/details/:provider/:id', async (c) => {
     const id = c.req.param('id');
