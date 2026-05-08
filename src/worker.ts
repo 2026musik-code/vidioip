@@ -31,48 +31,75 @@ api.get('/list', async (c) => {
   const cacheKey = 'list_all';
   const now = Date.now();
   const spoofIpParam = c.req.query('spoofIp');
-  const ipPalsu = spoofIpParam || bikinIPPalsu();
   
   if (!spoofIpParam && memoryCache[cacheKey] && now - memoryCache[cacheKey].time < 3600 * 1000) {
     return c.json({ success: true, source: "Memory Cache", data: memoryCache[cacheKey].data });
   }
 
   try {
-    const requests = [];
-    const fetchParams = {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36",
-        "Accept": "application/json",
-        "X-Forwarded-For": ipPalsu,
-        "X-Real-IP": ipPalsu,
-        "Client-IP": ipPalsu
-      }
-    };
-
-    for (let i = 1; i <= 5; i++) {
-        requests.push(fetch(`https://api.sansekai.my.id/api/dramabox/foryou?page=${i}`, fetchParams));
-    }
-
-    const responses = await Promise.all(requests);
     let rawData: any[] = [];
-    
-    for (const response of responses) {
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.message && data.message.toLowerCase().includes('limit')) {
-          throw new Error('Limit IP: ' + data.message);
+    let attempts = 0;
+    let success = false;
+    let lastError: any = null;
+
+    while (attempts < 5 && !success) {
+      attempts++;
+      const currentIp = spoofIpParam || bikinIPPalsu();
+      const fetchParams = {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36",
+          "Accept": "application/json",
+          "X-Forwarded-For": currentIp,
+          "X-Real-IP": currentIp,
+          "Client-IP": currentIp
         }
-        if (Array.isArray(data)) {
-          rawData = rawData.concat(data);
-        }
-      } else if (response.status === 429) {
-        throw new Error('Limit API terlampaui (429)! Silakan ganti IP.');
-      } else {
-        // It might be a 500 error if limited, just in case
+      };
+
+      const requests = [];
+      for (let i = 1; i <= 5; i++) {
+          requests.push(fetch(`https://api.sansekai.my.id/api/dramabox/foryou?page=${i}`, fetchParams));
       }
+
+      const responses = await Promise.all(requests);
+      let currentData: any[] = [];
+      let isLimited = false;
+      
+      for (const response of responses) {
+        if (response.ok) {
+          const data = await response.json();
+          if (data && data.message && data.message.toLowerCase().includes('limit')) {
+            isLimited = true;
+            lastError = new Error('Limit IP: ' + data.message);
+            break;
+          }
+          if (Array.isArray(data)) {
+            currentData = currentData.concat(data);
+          }
+        } else if (response.status === 429) {
+          isLimited = true;
+          lastError = new Error('Limit API terlampaui (429)! Silakan ganti IP.');
+          break;
+        }
+      }
+
+      if (isLimited) {
+        if (spoofIpParam) break;
+        continue;
+      }
+
+      if (currentData.length === 0) {
+        lastError = new Error("Server target down atau tidak ada data");
+        if (spoofIpParam) break;
+        continue;
+      }
+
+      rawData = currentData;
+      success = true;
     }
 
-    if (rawData.length === 0) throw new Error("Server target down atau IP terkena Limit");
+    if (!success) {
+      throw lastError || new Error("Server target down atau IP terkena Limit setelah beberapa percobaan");
+    }
 
     const cleanData = rawData.map((item: any) => ({
       id: item.bookId,
@@ -159,44 +186,70 @@ api.get('/details/:provider/:id', async (c) => {
     const id = c.req.param('id');
     const url = `https://api.sansekai.my.id/api/dramabox/detail?bookId=${id}`;
     const spoofIpParam = c.req.query('spoofIp');
-    const ipPalsu = spoofIpParam || bikinIPPalsu();
+    
+    let attempts = 0;
+    let success = false;
+    let lastError: any = null;
+    let rawData: any = null;
+    let finalStatus = 500;
 
-    try {
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-          "Accept": "application/json",
-          "X-Forwarded-For": ipPalsu,
-          "X-Real-IP": ipPalsu,
-          "Client-IP": ipPalsu
+    while (attempts < 5 && !success) {
+      attempts++;
+      const currentIp = spoofIpParam || bikinIPPalsu();
+
+      try {
+        const response = await fetch(url, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+            "X-Forwarded-For": currentIp,
+            "X-Real-IP": currentIp,
+            "Client-IP": currentIp
+          }
+        });
+        
+        if (!response.ok) {
+          if (response.status === 429) {
+             lastError = new Error("Limit API terlampaui (429)! Silakan ganti IP.");
+             finalStatus = 429;
+             if (spoofIpParam) break;
+             continue;
+          }
+          lastError = new Error("Detail tidak ditemukan di sumber penyedia.");
+          finalStatus = response.status;
+          break; // Don't retry on other errors like 404
         }
-      });
-      
-      if (!response.ok) {
-        if (response.status === 429) {
-           return c.json({ success: false, message: "Limit API terlampaui (429)! Silakan ganti IP." }, 429);
+
+        const data = await response.json();
+        if (data && data.message && data.message.toLowerCase().includes('limit')) {
+          lastError = new Error('Limit IP: ' + data.message);
+          finalStatus = 429;
+          if (spoofIpParam) break;
+          continue;
         }
-        return c.json({ success: false, message: "Detail tidak ditemukan di sumber penyedia." }, response.status as any);
+
+        rawData = data;
+        success = true;
+      } catch (e: any) {
+        lastError = e;
+        if (spoofIpParam) break;
       }
-
-      const rawData = await response.json();
-      if (rawData && rawData.message && rawData.message.toLowerCase().includes('limit')) {
-        throw new Error('Limit IP: ' + rawData.message);
-      }
-
-      return c.json({
-        success: true,
-        data: {
-          id: rawData.bookId,
-          title: rawData.bookName,
-          desc: rawData.introduction,
-          total_episodes: rawData.chapterCount,
-          cover: rawData.coverWap,
-        }
-      });
-    } catch (e: any) {
-      return c.json({ success: false, message: e.message }, 500);
     }
+
+    if (!success || !rawData) {
+      return c.json({ success: false, message: lastError?.message || "Gagal mengambil data setelah beberapa percobaan" }, finalStatus as any);
+    }
+
+    return c.json({
+      success: true,
+      data: {
+        id: rawData.bookId,
+        title: rawData.bookName,
+        desc: rawData.introduction,
+        total_episodes: rawData.chapterCount,
+        cover: rawData.coverWap,
+      }
+    });
 });
 
 api.get('/play/:provider/:id/:ep', async (c) => {
@@ -205,43 +258,73 @@ api.get('/play/:provider/:id/:ep', async (c) => {
     const cacheKey = `play_${id}_${ep}`;
     const now = Date.now();
     const spoofIpParam = c.req.query('spoofIp');
-    const ipPalsu = spoofIpParam || bikinIPPalsu();
     
     if (!spoofIpParam && memoryCache[cacheKey] && now - memoryCache[cacheKey].time < 300 * 1000) {
       return c.json(memoryCache[cacheKey].data);
     }
 
+    let attempts = 0;
+    let success = false;
+    let lastError: any = null;
+    let epData: any = null;
+    let finalStatus = 500;
+
+    while (attempts < 5 && !success) {
+      attempts++;
+      const currentIp = spoofIpParam || bikinIPPalsu();
+
+      try {
+        const listResponse = await fetch(`https://api.sansekai.my.id/api/dramabox/allepisode?bookId=${id}`, {
+          headers: { 
+            "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36",
+            "X-Forwarded-For": currentIp,
+            "X-Real-IP": currentIp,
+            "Client-IP": currentIp
+          }
+        });
+
+        if (!listResponse.ok) {
+          if (listResponse.status === 429) {
+             lastError = new Error("Limit API terlampaui (429)! Silakan ganti IP.");
+             finalStatus = 429;
+             if (spoofIpParam) break;
+             continue;
+          }
+          lastError = new Error("Gagal mengambil daftar episode dari sumber penyedia.");
+          finalStatus = listResponse.status;
+          break; // Don't retry on other errors
+        }
+
+        const epsData = await listResponse.json();
+        if (epsData && epsData.message && epsData.message.toLowerCase().includes('limit')) {
+          lastError = new Error('Limit IP: ' + epsData.message);
+          finalStatus = 429;
+          if (spoofIpParam) break;
+          continue;
+        }
+
+        const targetEp = parseInt(ep, 10);
+        const episodeInfo = epsData.find((e: any) => e.chapterIndex === targetEp - 1 || e.chapterName === `EP ${targetEp}` || e.chapterName === `Episode ${targetEp}`);
+
+        if (!episodeInfo || !episodeInfo.cdnList || !episodeInfo.cdnList[0]) {
+          lastError = new Error("Episode " + targetEp + " tidak ditemukan");
+          finalStatus = 404;
+          break; // Don't retry if episode not found
+        }
+
+        epData = episodeInfo;
+        success = true;
+      } catch (e: any) {
+        lastError = e;
+        if (spoofIpParam) break;
+      }
+    }
+
+    if (!success || !epData) {
+      return c.json({ success: false, message: lastError?.message || "Gagal mengambil episode setelah beberapa percobaan" }, finalStatus as any);
+    }
+
     try {
-      let videoUrl = "";
-
-      const listResponse = await fetch(`https://api.sansekai.my.id/api/dramabox/allepisode?bookId=${id}`, {
-        headers: { 
-          "User-Agent": "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36",
-          "X-Forwarded-For": ipPalsu,
-          "X-Real-IP": ipPalsu,
-          "Client-IP": ipPalsu
-        }
-      });
-
-      if (!listResponse.ok) {
-        if (listResponse.status === 429) {
-           return c.json({ success: false, message: "Limit API terlampaui (429)! Silakan ganti IP." }, 429);
-        }
-        return c.json({ success: false, message: "Gagal mengambil daftar episode dari sumber penyedia." }, listResponse.status as any);
-      }
-
-      const epsData = await listResponse.json();
-      if (epsData && epsData.message && epsData.message.toLowerCase().includes('limit')) {
-        throw new Error('Limit IP: ' + epsData.message);
-      }
-      const targetEp = parseInt(ep, 10);
-      
-      const epData = epsData.find((e: any) => e.chapterIndex === targetEp - 1 || e.chapterName === `EP ${targetEp}` || e.chapterName === `Episode ${targetEp}`);
-
-      if (!epData || !epData.cdnList || !epData.cdnList[0]) {
-        throw new Error("Episode " + targetEp + " tidak ditemukan");
-      }
-
       // Try to find 720p or fallback to the first available quality
       const vPaths = epData.cdnList[0].videoPathList;
       const bestPath = vPaths.find((v: any) => v.quality <= 720)?.videoPath || vPaths[0].videoPath;
@@ -250,7 +333,7 @@ api.get('/play/:provider/:id/:ep', async (c) => {
         throw new Error("Video URL tidak tersedia untuk episode ini");
       }
 
-      videoUrl = `https://api.sansekai.my.id/api/dramabox/decrypt-stream?url=${encodeURIComponent(bestPath)}`;
+      const videoUrl = `https://api.sansekai.my.id/api/dramabox/decrypt-stream?url=${encodeURIComponent(bestPath)}`;
 
       const responseData = {
         success: true,
