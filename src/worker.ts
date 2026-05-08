@@ -63,7 +63,7 @@ api.get('/list', async (c) => {
       let currentData: any[] = [];
       let isLimited = false;
 
-      for (let i = 1; i <= 5; i++) {
+      for (let i = 1; i <= 15; i++) {
         const response = await fetch(`https://api.sansekai.my.id/api/dramabox/foryou?page=${i}`, fetchParams);
         if (response.ok) {
           const data = await response.json();
@@ -110,7 +110,8 @@ api.get('/list', async (c) => {
       episodes: item.chapterCount,
       desc: item.introduction,
       provider: 'dramabox',
-      isIndonesian: item.bookName && item.bookName.toLowerCase().includes("sulih suara")
+      isIndonesian: item.bookName && item.bookName.toLowerCase().includes("sulih suara"),
+      tags: item.tags || []
     }));
 
     const uniqueData = Array.from(new Map(cleanData.map(item => [item.id, item])).values());
@@ -138,7 +139,8 @@ api.get('/search', async (c) => {
     if (q) {
       const lowerQ = q.toLowerCase();
       data = data.filter((s: any) => 
-        s.title && s.title.toLowerCase().includes(lowerQ)
+        (s.title && s.title.toLowerCase().includes(lowerQ)) ||
+        (s.tags && s.tags.some((tag: string) => tag.toLowerCase().includes(lowerQ)))
       );
     }
 
