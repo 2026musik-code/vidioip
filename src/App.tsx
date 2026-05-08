@@ -235,8 +235,8 @@ function HomePage() {
               <span className="text-[13px] text-red-500 font-medium cursor-pointer">Lihat Semua</span>
             </div>
             <div className="grid grid-rows-1 grid-flow-col gap-3 overflow-x-auto pb-4 snap-x snap-mandatory no-scrollbar scroll-smooth">
-              {series.slice(1, 10).map((item) => (
-                <Link key={item.id} to={`/watch/feed?id=${item.id}&provider=${item.provider || 'dramabox'}`} className="w-28 sm:w-32 snap-start shrink-0 group">
+              {series.slice(1, 10).map((item, idx) => (
+                <Link key={`tr-${item.id || idx}-${idx}`} to={`/watch/feed?id=${item.id}&provider=${item.provider || 'dramabox'}`} className="w-28 sm:w-32 snap-start shrink-0 group">
                   <div className="aspect-[3/4] rounded-md overflow-hidden relative mb-1.5 shadow-sm shadow-black/50">
                     <img src={item.cover} alt={item.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     <div className="absolute bottom-1 left-1 bg-black/80 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm font-medium">
