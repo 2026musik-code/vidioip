@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { handle } from 'hono/cloudflare-pages';
 
-const app = new Hono().basePath('/api');
+const app = new Hono();
+const api = new Hono().basePath('/api');
 
 let memoryCache: Record<string, { time: number, data: any }> = {};
 
@@ -10,7 +10,7 @@ function bikinIPPalsu() {
   return `${acak()}.${acak()}.${acak()}.${acak()}`;
 }
 
-app.get('/ips', async (c) => {
+api.get('/ips', async (c) => {
   try {
     const resp = await fetch('https://raw.githubusercontent.com/FoolVPN-ID/Nautica/main/proxyList.txt');
     const text = await resp.text();
@@ -27,7 +27,7 @@ app.get('/ips', async (c) => {
   }
 });
 
-app.get('/list', async (c) => {
+api.get('/list', async (c) => {
   const cacheKey = 'list_all';
   const now = Date.now();
   const spoofIpParam = c.req.query('spoofIp');
@@ -97,7 +97,7 @@ app.get('/list', async (c) => {
   }
 });
 
-app.get('/search', async (c) => {
+api.get('/search', async (c) => {
   try {
     const q = c.req.query('q') || '';
     const listCache = memoryCache['list_all'];
@@ -120,7 +120,7 @@ app.get('/search', async (c) => {
   }
 });
 
-app.get('/proxy-video', async (c) => {
+api.get('/proxy-video', async (c) => {
   const url = c.req.query('url');
   if (!url) {
     return new Response('URL is required', { status: 400 });
@@ -155,7 +155,7 @@ app.get('/proxy-video', async (c) => {
   }
 });
 
-app.get('/details/:provider/:id', async (c) => {
+api.get('/details/:provider/:id', async (c) => {
     const id = c.req.param('id');
     const url = `https://api.sansekai.my.id/api/dramabox/detail?bookId=${id}`;
     const spoofIpParam = c.req.query('spoofIp');
@@ -199,7 +199,7 @@ app.get('/details/:provider/:id', async (c) => {
     }
 });
 
-app.get('/play/:provider/:id/:ep', async (c) => {
+api.get('/play/:provider/:id/:ep', async (c) => {
     const id = c.req.param('id');
     const ep = c.req.param('ep');
     const cacheKey = `play_${id}_${ep}`;
@@ -269,4 +269,10 @@ app.get('/play/:provider/:id/:ep', async (c) => {
     }
 });
 
-export const onRequest = handle(app);
+app.route('/', api);
+
+app.get('*', async (c) => {
+  return (c.env as any).ASSETS.fetch(new Request(new URL('/', c.req.url)));
+});
+
+export default app;
