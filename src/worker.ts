@@ -152,34 +152,7 @@ api.get('/proxy-video', async (c) => {
   if (!url) {
     return new Response('URL is required', { status: 400 });
   }
-
-  try {
-      const headers: Record<string, string> = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://drama.sansekai.my.id/",
-        "Accept": "*/*",
-      };
-
-      const range = c.req.header('range');
-      if (range) headers['Range'] = range;
-
-      const response = await fetch(url, { headers });
-
-      const resHeaders = new Headers();
-      response.headers.forEach((val, key) => {
-        if (key.toLowerCase() !== 'content-encoding' && key.toLowerCase() !== 'transfer-encoding') {
-          resHeaders.set(key, val);
-        }
-      });
-
-      return new Response(response.body, {
-        status: response.status,
-        headers: resHeaders
-      });
-  } catch (error) {
-      console.error("Proxy error:", error);
-      return new Response('Proxy Server Error', { status: 500 });
-  }
+  return c.redirect(url, 302);
 });
 
 api.get('/details/:provider/:id', async (c) => {

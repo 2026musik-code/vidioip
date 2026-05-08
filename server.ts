@@ -143,39 +143,7 @@ async function startServer() {
     if (!url || typeof url !== 'string') {
       return res.status(400).send('URL is required');
     }
-
-    try {
-      const headers: Record<string, string> = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://drama.sansekai.my.id/",
-        "Accept": "*/*",
-      };
-
-      if (req.headers.range) {
-        headers['Range'] = req.headers.range;
-      }
-
-      const response = await fetch(url, { headers });
-
-      res.status(response.status);
-      response.headers.forEach((val, key) => {
-        // Must exclude certain headers
-        if (key.toLowerCase() !== 'content-encoding' && key.toLowerCase() !== 'transfer-encoding') {
-          res.setHeader(key, val);
-        }
-      });
-
-      if (response.body) {
-        const { Readable } = await import('stream');
-        const nodeStream = Readable.fromWeb(response.body as any);
-        nodeStream.pipe(res);
-      } else {
-        res.end();
-      }
-    } catch (error) {
-      console.error("Proxy error:", error);
-      res.status(500).end();
-    }
+    return res.redirect(302, url);
   });
 
   app.get('/api/details/:provider/:id', async (req, res) => {
