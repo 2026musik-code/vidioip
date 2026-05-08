@@ -1,4 +1,4 @@
-name = "dramabox-cf"
+name = "vidioip"
 main = "src/worker.ts"
 compatibility_date = "2024-03-20"
 
