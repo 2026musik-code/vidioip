@@ -341,7 +341,7 @@ function VideoFeedPage() {
         if (data.videoUrl) {
           setVideos([{
             id: currentEpisode.toString(),
-            url: data.videoUrl,
+            url: `/api/proxy-video?url=${encodeURIComponent(data.videoUrl)}`,
             rawUrl: data.rawUrl,
             title: data.title || `Episode ${currentEpisode}`,
             description: '',

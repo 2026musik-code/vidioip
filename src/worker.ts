@@ -4,10 +4,15 @@ const app = new Hono();
 const api = new Hono().basePath('/api');
 
 let memoryCache: Record<string, { time: number, data: any }> = {};
+let blockedIps = new Set<string>();
 
 function bikinIPPalsu() {
   const acak = () => Math.floor(Math.random() * 255) + 1;
-  return `${acak()}.${acak()}.${acak()}.${acak()}`;
+  let ip: string;
+  do {
+    ip = `${acak()}.${acak()}.${acak()}.${acak()}`;
+  } while (blockedIps.has(ip));
+  return ip;
 }
 
 api.get('/ips', async (c) => {
@@ -55,19 +60,15 @@ api.get('/list', async (c) => {
         }
       };
 
-      const requests = [];
-      for (let i = 1; i <= 5; i++) {
-          requests.push(fetch(`https://api.sansekai.my.id/api/dramabox/foryou?page=${i}`, fetchParams));
-      }
-
-      const responses = await Promise.all(requests);
       let currentData: any[] = [];
       let isLimited = false;
-      
-      for (const response of responses) {
+
+      for (let i = 1; i <= 5; i++) {
+        const response = await fetch(`https://api.sansekai.my.id/api/dramabox/foryou?page=${i}`, fetchParams);
         if (response.ok) {
           const data = await response.json();
           if (data && data.message && data.message.toLowerCase().includes('limit')) {
+            blockedIps.add(currentIp);
             isLimited = true;
             lastError = new Error('Limit IP: ' + data.message);
             break;
@@ -76,6 +77,7 @@ api.get('/list', async (c) => {
             currentData = currentData.concat(data);
           }
         } else if (response.status === 429) {
+          blockedIps.add(currentIp);
           isLimited = true;
           lastError = new Error('Limit API terlampaui (429)! Silakan ganti IP.');
           break;
@@ -152,7 +154,21 @@ api.get('/proxy-video', async (c) => {
   if (!url) {
     return new Response('URL is required', { status: 400 });
   }
-  return c.redirect(url, 302);
+
+  try {
+      const headers = new Headers();
+      headers.set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+      headers.set("Referer", "https://drama.sansekai.my.id/");
+      headers.set("Accept", "*/*");
+
+      const range = c.req.header('range');
+      if (range) headers.set('Range', range);
+
+      return await fetch(url, { headers });
+  } catch (error) {
+      console.error("Proxy error:", error);
+      return new Response('Proxy Server Error', { status: 500 });
+  }
 });
 
 api.get('/details/:provider/:id', async (c) => {
@@ -183,6 +199,7 @@ api.get('/details/:provider/:id', async (c) => {
         
         if (!response.ok) {
           if (response.status === 429) {
+             blockedIps.add(currentIp);
              lastError = new Error("Limit API terlampaui (429)! Silakan ganti IP.");
              finalStatus = 429;
              if (spoofIpParam) break;
@@ -195,6 +212,7 @@ api.get('/details/:provider/:id', async (c) => {
 
         const data = await response.json();
         if (data && data.message && data.message.toLowerCase().includes('limit')) {
+          blockedIps.add(currentIp);
           lastError = new Error('Limit IP: ' + data.message);
           finalStatus = 429;
           if (spoofIpParam) break;
@@ -258,6 +276,7 @@ api.get('/play/:provider/:id/:ep', async (c) => {
 
         if (!listResponse.ok) {
           if (listResponse.status === 429) {
+             blockedIps.add(currentIp);
              lastError = new Error("Limit API terlampaui (429)! Silakan ganti IP.");
              finalStatus = 429;
              if (spoofIpParam) break;
@@ -270,6 +289,7 @@ api.get('/play/:provider/:id/:ep', async (c) => {
 
         const epsData = await listResponse.json();
         if (epsData && epsData.message && epsData.message.toLowerCase().includes('limit')) {
+          blockedIps.add(currentIp);
           lastError = new Error('Limit IP: ' + epsData.message);
           finalStatus = 429;
           if (spoofIpParam) break;
